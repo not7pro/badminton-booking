@@ -28,8 +28,8 @@ function init() {
     setupFirebaseListener();
     bindEvents();
     
-    // Check for day change every minute
-    setInterval(checkDayChange, 60000);
+    // Check for date update in header every minute
+    setInterval(setCurrentDate, 60000);
 }
 
 // --- Date & Time Helpers ---
@@ -52,17 +52,10 @@ function getTodayString() {
     return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 }
 
-let currentListenDate = getTodayString();
-let unsubscribeFirebase = null;
-
-function checkDayChange() {
-    const actualToday = getTodayString();
-    if (actualToday !== currentListenDate) {
-        currentListenDate = actualToday;
-        setCurrentDate();
-        setDefaultFormValues();
-        setupFirebaseListener();
-    }
+function formatDate(dateStr) {
+    const d = new Date(dateStr + 'T00:00:00');
+    const options = { month: 'short', day: 'numeric' };
+    return d.toLocaleDateString('en-US', options);
 }
 
 function formatTime(timeStr) {
@@ -91,30 +84,32 @@ function formatDuration(hours) {
 }
 
 // --- Firebase ---
+let unsubscribeFirebase = null;
 function setupFirebaseListener() {
-    if (unsubscribeFirebase) {
-        unsubscribeFirebase();
-    }
+    if (unsubscribeFirebase) unsubscribeFirebase();
     
-    // We only listen to today's bookings.
-    // The DB will store past days automatically, acting as an archive, 
-    // but the app appears "reset" daily.
-    const todayRef = ref(db, `badminton-bookings/${currentListenDate}`);
+    // Listen to ALL bookings
+    const allRef = ref(db, `badminton-bookings`);
     
-    unsubscribeFirebase = onValue(todayRef, (snapshot) => {
+    unsubscribeFirebase = onValue(allRef, (snapshot) => {
         const data = snapshot.val();
         bookings = [];
         if (data) {
-            Object.keys(data).forEach(key => {
-                bookings.push({
-                    id: key,
-                    ...data[key]
+            // Data is grouped by date: { "2026-06-10": { id1: {...}, id2: {...} }, "2026-06-11": {...} }
+            Object.keys(data).forEach(dateKey => {
+                const dayBookings = data[dateKey];
+                Object.keys(dayBookings).forEach(id => {
+                    bookings.push({
+                        id: id,
+                        ...dayBookings[id]
+                    });
                 });
             });
         }
         
-        // Sort bookings by time then court
+        // Sort bookings by date, then time, then court
         bookings.sort((a, b) => {
+            if (a.date !== b.date) return a.date.localeCompare(b.date);
             if (a.time !== b.time) return a.time.localeCompare(b.time);
             return a.court - b.court;
         });
@@ -126,7 +121,6 @@ function setupFirebaseListener() {
 
 // --- Booking CRUD ---
 function addBooking(booking) {
-    // Add to specific date node in Firebase
     const bookingRef = ref(db, `badminton-bookings/${booking.date}/${booking.id}`);
     set(bookingRef, {
         date: booking.date,
@@ -139,14 +133,10 @@ function addBooking(booking) {
 
 function deleteBooking(id, date) {
     const bookingRef = ref(db, `badminton-bookings/${date}/${id}`);
-    
-    // Add remove animation locally before deleting from DB
     const item = document.querySelector(`[data-id="${id}"]`);
     if (item) {
         item.classList.add('removing');
-        setTimeout(() => {
-            remove(bookingRef);
-        }, 300);
+        setTimeout(() => remove(bookingRef), 300);
     } else {
         remove(bookingRef);
     }
@@ -158,10 +148,10 @@ function clearAllBookings() {
         return;
     }
     
-    // Clear only today's bookings
-    const todayRef = ref(db, `badminton-bookings/${currentListenDate}`);
-    remove(todayRef).then(() => {
-        showToast('All bookings cleared for today', 'info');
+    // Clear ALL bookings
+    const allRef = ref(db, `badminton-bookings`);
+    remove(allRef).then(() => {
+        showToast('All bookings cleared', 'info');
     });
 }
 
@@ -170,14 +160,8 @@ function hasOverlap(newBooking) {
     const newStart = timeToMinutes(newBooking.time);
     const newEnd = newStart + newBooking.hours * 60;
 
-    // Check against current loaded bookings (which are only for today)
-    // If they book for a future date, we don't have that data loaded.
-    // For simplicity, we assume they only book for today. If they book for another date, 
-    // we should ideally check Firebase first, but let's keep it simple.
-    if (newBooking.date !== currentListenDate) return false;
-
     return bookings.some(b => {
-        if (b.court !== newBooking.court) return false;
+        if (b.court !== newBooking.court || b.date !== newBooking.date) return false;
         const bStart = timeToMinutes(b.time);
         const bEnd = bStart + b.hours * 60;
         return newStart < bEnd && newEnd > bStart;
@@ -202,8 +186,13 @@ function renderBookings() {
     }
 
     bookingsList.innerHTML = '';
+    
+    // To organize the list, we'll keep all bookings but we don't need grouping 
+    // since the date badge makes it clear.
+    const todayStr = getTodayString();
+    
     filtered.forEach(booking => {
-        bookingsList.appendChild(createBookingItem(booking));
+        bookingsList.appendChild(createBookingItem(booking, todayStr));
     });
 }
 
@@ -212,13 +201,13 @@ function createEmptyState() {
     div.className = 'empty-state';
     div.innerHTML = `
         <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity="0.3"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-        <p>${activeFilter === 'all' ? 'No bookings yet' : `No bookings for Court ${activeFilter}`}</p>
+        <p>${activeFilter === 'all' ? 'No bookings' : `No bookings for Court ${activeFilter}`}</p>
         <span>Add a booking to get started</span>
     `;
     return div;
 }
 
-function createBookingItem(booking) {
+function createBookingItem(booking, todayStr) {
     const div = document.createElement('div');
     div.className = 'booking-item';
     div.dataset.id = booking.id;
@@ -226,6 +215,7 @@ function createBookingItem(booking) {
     const startTime = formatTime(booking.time);
     const endTime = formatEndTime(booking.time, booking.hours);
     const duration = formatDuration(booking.hours);
+    const dateLabel = booking.date === todayStr ? 'Today' : formatDate(booking.date);
 
     div.innerHTML = `
         <div class="booking-court-badge court-${booking.court}">C${booking.court}</div>
@@ -238,7 +228,7 @@ function createBookingItem(booking) {
                 </span>
                 <span>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/></svg>
-                    Today
+                    ${dateLabel}
                 </span>
             </div>
             ${booking.player ? `<div class="booking-player">${escapeHtml(booking.player)}</div>` : ''}
@@ -253,20 +243,22 @@ function createBookingItem(booking) {
 
 // --- Court Cards ---
 function updateCourtCards() {
+    const todayStr = getTodayString();
     const now = new Date();
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
+    // The status cards should only reflect TODAY's court status
     for (let court = 1; court <= 3; court++) {
-        const courtBookings = bookings.filter(b => b.court === court);
+        const courtTodayBookings = bookings.filter(b => b.court === court && b.date === todayStr);
         const countEl = document.getElementById(`count-${court}`);
         const statusEl = document.getElementById(`status-${court}`);
         const nextEl = document.getElementById(`next-${court}`);
 
         // Count
-        countEl.textContent = courtBookings.length;
+        countEl.textContent = courtTodayBookings.length;
 
         // Check if currently booked
-        const currentlyBooked = courtBookings.some(b => {
+        const currentlyBooked = courtTodayBookings.some(b => {
             const start = timeToMinutes(b.time);
             const end = start + b.hours * 60;
             return currentMinutes >= start && currentMinutes < end;
@@ -280,17 +272,17 @@ function updateCourtCards() {
             statusEl.className = 'court-status available';
         }
 
-        // Next booking
-        const upcoming = courtBookings
+        // Next booking (today)
+        const upcoming = courtTodayBookings
             .filter(b => timeToMinutes(b.time) > currentMinutes)
             .sort((a, b) => a.time.localeCompare(b.time));
 
         if (upcoming.length > 0) {
             nextEl.textContent = `Next: ${formatTime(upcoming[0].time)}`;
-        } else if (courtBookings.length > 0) {
+        } else if (courtTodayBookings.length > 0) {
             nextEl.textContent = 'No more bookings today';
         } else {
-            nextEl.textContent = 'No upcoming bookings';
+            nextEl.textContent = 'No upcoming bookings today';
         }
     }
 }
@@ -345,16 +337,16 @@ function handleSubmit(e) {
     };
 
     if (hasOverlap(newBooking)) {
-        showToast(`Court ${court} is already booked during that time`, 'error');
+        showToast(`Court ${court} is already booked during that time on ${date}`, 'error');
         return;
     }
 
     addBooking(newBooking);
     
-    if (date === currentListenDate) {
+    if (date === getTodayString()) {
         showToast(`Booked Court ${court} at ${formatTime(time)}`, 'success');
     } else {
-        showToast(`Booked Court ${court} for ${date}`, 'success');
+        showToast(`Booked Court ${court} for ${formatDate(date)}`, 'success');
     }
 
     // Reset only time, court, hours, player — keep date

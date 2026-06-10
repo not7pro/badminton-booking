@@ -10,7 +10,7 @@ const END_HOUR = 23;
 const TIME_SLOT_MINUTES = 30;
 
 // --- DOM Elements ---
-const currentDateEl = document.getElementById('currentDate');
+const dateInput = document.getElementById('scheduleDate');
 const scheduleBody = document.getElementById('scheduleBody');
 const totalBookedEl = document.getElementById('totalBooked');
 const totalFreeEl = document.getElementById('totalFree');
@@ -18,21 +18,27 @@ const totalHoursEl = document.getElementById('totalHours');
 
 // --- Initialization ---
 function init() {
-    setCurrentDate();
+    setDefaultDate();
     setupFirebaseListener();
     
-    // Auto-refresh current time row every minute, and check for day change
+    // Auto-refresh current time row every minute
     setInterval(() => {
-        checkDayChange();
         renderScheduleGrid();
     }, 60000);
+    
+    dateInput.addEventListener('change', () => {
+        currentListenDate = dateInput.value;
+        setupFirebaseListener();
+    });
 }
 
 // --- Date Helpers ---
-function setCurrentDate() {
-    const now = new Date();
-    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-    currentDateEl.textContent = now.toLocaleDateString('en-US', options);
+function setDefaultDate() {
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    dateInput.value = `${yyyy}-${mm}-${dd}`;
 }
 
 function getTodayString() {
@@ -42,15 +48,6 @@ function getTodayString() {
 
 let currentListenDate = getTodayString();
 let unsubscribeFirebase = null;
-
-function checkDayChange() {
-    const actualToday = getTodayString();
-    if (actualToday !== currentListenDate) {
-        currentListenDate = actualToday;
-        setCurrentDate();
-        setupFirebaseListener();
-    }
-}
 
 function formatTimeLabel(hour, minutes) {
     const ampm = hour >= 12 ? 'PM' : 'AM';
@@ -65,9 +62,9 @@ function setupFirebaseListener() {
         unsubscribeFirebase();
     }
     
-    const todayRef = ref(db, `badminton-bookings/${currentListenDate}`);
+    const dayRef = ref(db, `badminton-bookings/${currentListenDate}`);
     
-    unsubscribeFirebase = onValue(todayRef, (snapshot) => {
+    unsubscribeFirebase = onValue(dayRef, (snapshot) => {
         const data = snapshot.val();
         bookings = [];
         if (data) {
@@ -108,6 +105,8 @@ function getBookingForSlot(court, hour, minutes) {
 }
 
 function isCurrentTimeSlot(hour, minutes) {
+    if (currentListenDate !== getTodayString()) return false;
+    
     const now = new Date();
     const currentHour = now.getHours();
     const currentMinutes = now.getMinutes();

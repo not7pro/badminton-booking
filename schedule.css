@@ -34,6 +34,27 @@
     box-shadow: 0 2px 8px var(--accent-1-glow);
 }
 
+/* ===== Date Picker ===== */
+.date-picker {
+    background: var(--bg-glass);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--radius-md);
+    padding: 8px 16px;
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    font-family: inherit;
+    font-weight: 500;
+    backdrop-filter: blur(10px);
+    outline: none;
+    cursor: pointer;
+    transition: all var(--transition-base);
+}
+
+.date-picker:focus {
+    border-color: var(--accent-1);
+    box-shadow: 0 0 0 3px var(--accent-1-glow);
+}
+
 /* ===== Legend ===== */
 .schedule-legend {
     display: flex;
