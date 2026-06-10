@@ -20,6 +20,7 @@ const timeInput = document.getElementById('bookingTime');
 const courtSelect = document.getElementById('courtSelect');
 const hoursSelect = document.getElementById('bookingHours');
 const playerInput = document.getElementById('playerName');
+const isPermanentInput = document.getElementById('isPermanent');
 
 // --- Initialization ---
 function init() {
@@ -161,7 +162,13 @@ function hasOverlap(newBooking) {
     const newEnd = newStart + newBooking.hours * 60;
 
     return bookings.some(b => {
-        if (b.court !== newBooking.court || b.date !== newBooking.date) return false;
+        if (b.court !== newBooking.court) return false;
+        
+        // If neither booking is permanent and they are on different dates, no overlap
+        if (b.date !== 'permanent' && newBooking.date !== 'permanent' && b.date !== newBooking.date) {
+            return false;
+        }
+
         const bStart = timeToMinutes(b.time);
         const bEnd = bStart + b.hours * 60;
         return newStart < bEnd && newEnd > bStart;
@@ -215,7 +222,14 @@ function createBookingItem(booking, todayStr) {
     const startTime = formatTime(booking.time);
     const endTime = formatEndTime(booking.time, booking.hours);
     const duration = formatDuration(booking.hours);
-    const dateLabel = booking.date === todayStr ? 'Today' : formatDate(booking.date);
+    
+    let dateLabel = '';
+    if (booking.date === 'permanent') {
+        dateLabel = 'Every Day';
+        div.classList.add('permanent-booking');
+    } else {
+        dateLabel = booking.date === todayStr ? 'Today' : formatDate(booking.date);
+    }
 
     div.innerHTML = `
         <div class="booking-court-badge court-${booking.court}">C${booking.court}</div>
@@ -247,9 +261,9 @@ function updateCourtCards() {
     const now = new Date();
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
-    // The status cards should only reflect TODAY's court status
+    // The status cards should reflect TODAY's status (today's bookings + permanent bookings)
     for (let court = 1; court <= 3; court++) {
-        const courtTodayBookings = bookings.filter(b => b.court === court && b.date === todayStr);
+        const courtTodayBookings = bookings.filter(b => b.court === court && (b.date === todayStr || b.date === 'permanent'));
         const countEl = document.getElementById(`count-${court}`);
         const statusEl = document.getElementById(`status-${court}`);
         const nextEl = document.getElementById(`next-${court}`);
@@ -311,12 +325,24 @@ function bindEvents() {
 
     // Refresh court statuses every minute
     setInterval(updateCourtCards, 60000);
+    
+    // Toggle date input when permanent is checked
+    isPermanentInput.addEventListener('change', (e) => {
+        if (e.target.checked) {
+            dateInput.disabled = true;
+            dateInput.parentElement.style.opacity = '0.5';
+        } else {
+            dateInput.disabled = false;
+            dateInput.parentElement.style.opacity = '1';
+        }
+    });
 }
 
 function handleSubmit(e) {
     e.preventDefault();
 
-    const date = dateInput.value;
+    const isPerm = isPermanentInput.checked;
+    const date = isPerm ? 'permanent' : dateInput.value;
     const time = timeInput.value;
     const court = parseInt(courtSelect.value);
     const hours = parseFloat(hoursSelect.value);
@@ -343,17 +369,22 @@ function handleSubmit(e) {
 
     addBooking(newBooking);
     
-    if (date === getTodayString()) {
+    if (isPerm) {
+        showToast(`Permanent booking added for Court ${court}`, 'success');
+    } else if (date === getTodayString()) {
         showToast(`Booked Court ${court} at ${formatTime(time)}`, 'success');
     } else {
         showToast(`Booked Court ${court} for ${formatDate(date)}`, 'success');
     }
 
-    // Reset only time, court, hours, player — keep date
+    // Reset only time, court, hours, player, checkbox — keep date
     timeInput.value = '';
     courtSelect.value = '';
     hoursSelect.value = '';
     playerInput.value = '';
+    isPermanentInput.checked = false;
+    dateInput.disabled = false;
+    dateInput.parentElement.style.opacity = '1';
     timeInput.focus();
 }
 

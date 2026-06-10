@@ -62,16 +62,20 @@ function setupFirebaseListener() {
         unsubscribeFirebase();
     }
     
-    const dayRef = ref(db, `badminton-bookings/${currentListenDate}`);
+    // Listen to ALL bookings so we can catch permanent ones
+    const allRef = ref(db, `badminton-bookings`);
     
-    unsubscribeFirebase = onValue(dayRef, (snapshot) => {
+    unsubscribeFirebase = onValue(allRef, (snapshot) => {
         const data = snapshot.val();
         bookings = [];
         if (data) {
-            Object.keys(data).forEach(key => {
-                bookings.push({
-                    id: key,
-                    ...data[key]
+            Object.keys(data).forEach(dateKey => {
+                const dayBookings = data[dateKey];
+                Object.keys(dayBookings).forEach(id => {
+                    bookings.push({
+                        id: id,
+                        ...dayBookings[id]
+                    });
                 });
             });
         }
@@ -86,7 +90,9 @@ function getBookingForSlot(court, hour, minutes) {
     const slotStartMinutes = hour * 60 + minutes;
     
     for (const b of bookings) {
+        // Only consider bookings for the currently viewed date, or permanent bookings
         if (b.court !== court) continue;
+        if (b.date !== currentListenDate && b.date !== 'permanent') continue;
         
         const [bH, bM] = b.time.split(':').map(Number);
         const bStartMinutes = bH * 60 + bM;
@@ -165,6 +171,9 @@ function renderScheduleGrid() {
                     
                     const contentDiv = document.createElement('div');
                     contentDiv.className = 'slot-booked-content';
+                    if (slotData.booking.date === 'permanent') {
+                        contentDiv.style.borderStyle = 'dashed';
+                    }
                     
                     const playerSpan = document.createElement('span');
                     playerSpan.className = 'slot-player';
