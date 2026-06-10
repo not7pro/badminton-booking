@@ -31,7 +31,12 @@
                     </div>
                 </div>
                 <div class="header-right">
-                    <input type="date" id="scheduleDate" class="date-picker">
+                    <div class="day-tabs" id="dayTabs">
+                        <button class="day-tab active" data-offset="0">Today</button>
+                        <button class="day-tab" data-offset="1">Tomorrow</button>
+                        <button class="day-tab" id="dayAfterTab" data-offset="2">Day 3</button>
+                        <input type="date" id="scheduleDate" class="date-picker" title="Pick another date">
+                    </div>
                 </div>
             </div>
             <!-- Navigation -->

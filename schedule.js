@@ -11,6 +11,8 @@ const TIME_SLOT_MINUTES = 30;
 
 // --- DOM Elements ---
 const dateInput = document.getElementById('scheduleDate');
+const dayTabs = document.querySelectorAll('.day-tab');
+const dayAfterTab = document.getElementById('dayAfterTab');
 const scheduleBody = document.getElementById('scheduleBody');
 const totalBookedEl = document.getElementById('totalBooked');
 const totalFreeEl = document.getElementById('totalFree');
@@ -18,6 +20,7 @@ const totalHoursEl = document.getElementById('totalHours');
 
 // --- Initialization ---
 function init() {
+    setupDayTabs();
     setDefaultDate();
     setupFirebaseListener();
     
@@ -28,17 +31,62 @@ function init() {
     
     dateInput.addEventListener('change', () => {
         currentListenDate = dateInput.value;
+        updateActiveTabFromDate(currentListenDate);
         setupFirebaseListener();
+    });
+    
+    dayTabs.forEach(tab => {
+        tab.addEventListener('click', (e) => {
+            const offset = parseInt(e.target.dataset.offset);
+            const targetDate = new Date();
+            targetDate.setDate(targetDate.getDate() + offset);
+            
+            const yyyy = targetDate.getFullYear();
+            const mm = String(targetDate.getMonth() + 1).padStart(2, '0');
+            const dd = String(targetDate.getDate()).padStart(2, '0');
+            
+            currentListenDate = `${yyyy}-${mm}-${dd}`;
+            dateInput.value = currentListenDate;
+            
+            dayTabs.forEach(t => t.classList.remove('active'));
+            e.target.classList.add('active');
+            
+            setupFirebaseListener();
+        });
     });
 }
 
 // --- Date Helpers ---
+function setupDayTabs() {
+    const day3 = new Date();
+    day3.setDate(day3.getDate() + 2);
+    const options = { weekday: 'short' };
+    dayAfterTab.textContent = day3.toLocaleDateString('en-US', options);
+}
+
+function updateActiveTabFromDate(dateStr) {
+    const targetDate = new Date(dateStr + 'T00:00:00');
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const diffTime = targetDate - today;
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+    
+    dayTabs.forEach(t => t.classList.remove('active'));
+    
+    if (diffDays >= 0 && diffDays <= 2) {
+        const tab = Array.from(dayTabs).find(t => parseInt(t.dataset.offset) === diffDays);
+        if (tab) tab.classList.add('active');
+    }
+}
+
 function setDefaultDate() {
     const today = new Date();
     const yyyy = today.getFullYear();
     const mm = String(today.getMonth() + 1).padStart(2, '0');
     const dd = String(today.getDate()).padStart(2, '0');
     dateInput.value = `${yyyy}-${mm}-${dd}`;
+    updateActiveTabFromDate(dateInput.value);
 }
 
 function getTodayString() {
