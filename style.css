@@ -134,6 +134,42 @@ body {
     backdrop-filter: blur(10px);
 }
 
+/* ===== Navigation ===== */
+.app-nav {
+    display: flex;
+    gap: 4px;
+    margin-top: 16px;
+    padding: 4px;
+    background: var(--bg-glass);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--radius-md);
+    width: fit-content;
+}
+
+.nav-link {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 0.82rem;
+    font-weight: 600;
+    border-radius: var(--radius-sm);
+    transition: all var(--transition-base);
+}
+
+.nav-link:hover {
+    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.nav-link.active {
+    background: var(--accent-1);
+    color: white;
+    box-shadow: 0 2px 8px var(--accent-1-glow);
+}
+
 /* ===== Court Status Cards ===== */
 .courts-overview {
     display: grid;
@@ -711,5 +747,14 @@ body {
 
     .filter-tabs {
         flex-wrap: wrap;
+    }
+
+    .app-nav {
+        width: 100%;
+    }
+
+    .nav-link {
+        flex: 1;
+        justify-content: center;
     }
 }
